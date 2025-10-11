@@ -1,7 +1,8 @@
 build
-!.vscode/*
+.vscode/*
 # OS-specific junk
 .DS_Store
 Thumbs.db
 # Doxygen output
 libs/TKJHAT/docs/out/
+c_testing
