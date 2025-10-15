@@ -54,6 +54,7 @@
     "raspberry-pi-pico.cmakePath": "${HOME}/.pico-sdk/cmake/v3.31.5/bin/cmake",
     "raspberry-pi-pico.ninjaPath": "${HOME}/.pico-sdk/ninja/v1.12.1/ninja",
     "files.associations": {
+        "*.py": "python",
         "stdlib.h": "c",
         "stdio.h": "c",
         "ssd1306.h": "c",
@@ -69,6 +70,7 @@
         "cstdio": "c",
         "freertos.h": "c",
         "pdm_microphone.h": "c",
-        "pins.h": "c"
+        "pins.h": "c",
+        "helper.h": "c"
     }
 }

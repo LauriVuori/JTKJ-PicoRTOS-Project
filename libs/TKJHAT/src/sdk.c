@@ -537,7 +537,7 @@ uint32_t veml6030_read_light() {
     // Exercise 2: In order to get the luminance we need to read the value of the VEML6030_ALS_REG (see VEML6030 datasheet)
     //            Use functions i2c_write_blocking and i2_read_blocking to collect luminance data.
     //            These functions are found in the Pico SDK:
-    //            https://www.raspberrypi.com/documentation/pico-sdk/hardware.html#group_hardware_i2c
+    //            design application document: https://www.vishay.com/docs/84367/designingveml6030.pdf
     //            The i2c that you must use is i2c_default.  
     //            from the sensor. Make necessary bitwise operation to store the results in a register of 16 bits.
     //            Multiply the value by the adequate value considering Integration Time of 100 ms and Gain of 1/8
@@ -547,7 +547,7 @@ uint32_t veml6030_read_light() {
     // Tehtävä 2: Saadaksemme luminanssin meidän tulee lukea VEML6030_ALS_REG -rekisterin arvo (katso VEML6030-datalehti).
     //            Käytä funktioita i2c_write_blocking ja i2_read_blocking luminanssidatan keräämiseen.
     //            Nämä funktiot löytyvät Pico SDK:sta:
-    //            https://www.raspberrypi.com/documentation/pico-sdk/hardware.html#group_hardware_i2c
+    //            design application document: https://www.vishay.com/docs/84367/designingveml6030.pdf
     //            Käytettävä i2c-väylä on i2c_default.
     //            Tee tarvittavat bittikohtaiset operaatiot tallettaksesi tuloksen 16-bittiseen rekisteriin.
     //            Kerro arvo sopivalla kertoimella huomioiden 100 ms integraatioaika ja vahvistus 1/8
@@ -555,6 +555,18 @@ uint32_t veml6030_read_light() {
     //            Lopuksi tallenna arvo muuttujaan luxVal_uncorrected.
   
     uint32_t luxVal_uncorrected = 0; 
+    uint8_t rx_buffer[2];
+    uint8_t tx_buffer[1];
+    tx_buffer[0] = VEML6030_ALS_REG;
+    if (i2c_write_blocking(i2c_default, VEML6030_I2C_ADDR, tx_buffer, 1, true) != PICO_ERROR_GENERIC) {
+        if (i2c_read_blocking(i2c_default, VEML6030_I2C_ADDR, rx_buffer, 2, false) != PICO_ERROR_GENERIC) {
+            luxVal_uncorrected = rx_buffer[1];
+            luxVal_uncorrected = (luxVal_uncorrected << 8);
+            luxVal_uncorrected |= rx_buffer[0];
+            luxVal_uncorrected = luxVal_uncorrected * 0.5376;
+        }
+        
+    }
     if (luxVal_uncorrected>1000){
         // Polynomial is pulled from pg 10 of the datasheet. 
         // See https://github.com/sparkfun/SparkFun_Ambient_Light_Sensor_Arduino_Library/blob/efde0817bd6857863067bd1653a2cfafe6c68732/src/SparkFun_VEML6030_Ambient_Light_Sensor.cpp#L409

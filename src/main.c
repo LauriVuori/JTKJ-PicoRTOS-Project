@@ -9,6 +9,8 @@
 #include <task.h>
 
 #include "tkjhat/sdk.h"
+#include <tusb.h>
+#include "usbSerialDebug/helper.h"
 
 // Exercise 4. Include the libraries necessaries to use the usb-serial-debug, and tinyusb
 // Tehtävä 4 . Lisää usb-serial-debugin ja tinyusbin käyttämiseen tarvittavat kirjastot.
@@ -21,7 +23,10 @@
 
 // Tehtävä 3: Tilakoneen esittely Add missing states.
 // Exercise 3: Definition of the state machine. Add missing states.
-enum state { WAITING=1};
+enum state {WAITING=1,
+            READ_SENSOR=2,
+            PRINT_DATA=3
+           };
 enum state programState = WAITING;
 
 // Tehtävä 3: Valoisuuden globaali muuttuja
@@ -33,23 +38,39 @@ static void btn_fxn(uint gpio, uint32_t eventMask) {
     //            Tarkista SDK, ja jos et löydä vastaavaa funktiota, sinun täytyy toteuttaa se itse.
     // Exercise 1: Toggle the LED. 
     //             Check the SDK and if you do not find a function you would need to implement it yourself. 
+    // toggle_red_led();
+    toggle_led();
 }
+
+// ---- Task running USB stack ----
+static void usbTask(void *arg) {
+    (void)arg;
+    while (1) {
+        tud_task();              // With FreeRTOS wait for events
+                                 // Do not add vTaskDelay. 
+    }
+}
+
 
 static void sensor_task(void *arg){
     (void)arg;
     // Tehtävä 2: Alusta valoisuusanturi. Etsi SDK-dokumentaatiosta sopiva funktio.
     // Exercise 2: Init the light sensor. Find in the SDK documentation the adequate function.
-   
+    init_veml6030();
+
     for(;;){
-        
+
         // Tehtävä 2: Muokkaa tästä eteenpäin sovelluskoodilla. Kommentoi seuraava rivi.
         //             
         // Exercise 2: Modify with application code here. Comment following line.
         //             Read sensor data and print it out as string; 
-        tight_loop_contents(); 
+        //tight_loop_contents(); 
+        if (programState == READ_SENSOR){
+            ambientLight = veml6030_read_light();
+            programState = PRINT_DATA;
+            vTaskDelay(pdMS_TO_TICKS(500));
+        }
 
-
-   
 
 
         // Tehtävä 3:  Muokkaa aiemmin Tehtävässä 2 tehtyä koodia ylempänä.
@@ -68,7 +89,7 @@ static void sensor_task(void *arg){
         
         // Exercise 2. Just for sanity check. Please, comment this out
         // Tehtävä 2: Just for sanity check. Please, comment this out
-        printf("sensorTask\n");
+        //printf("sensorTask\n");
 
         // Do not remove this
         vTaskDelay(pdMS_TO_TICKS(1000));
@@ -77,7 +98,10 @@ static void sensor_task(void *arg){
 
 static void print_task(void *arg){
     (void)arg;
-    
+    char buf[32]; 
+    while (!tud_mounted() || !tud_cdc_n_connected(1)){
+            vTaskDelay(pdMS_TO_TICKS(50));
+    }
     while(1){
         
         // Tehtävä 3: Kun tila on oikea, tulosta sensoridata merkkijonossa debug-ikkunaan
@@ -86,9 +110,29 @@ static void print_task(void *arg){
         // Exercise 3: Print out sensor data as string to debug window if the state is correct
         //             Remember to modify state
         //             Do not forget to comment next line of code.
-        tight_loop_contents();
-        
+        // tight_loop_contents();
 
+        if (programState == PRINT_DATA){
+        
+            //com7
+            if(tud_cdc_n_connected(CDC_ITF_TX)){
+                //Send them using tucdc_n_write to the ACM1
+                snprintf(buf, 32,"<%d>\n",ambientLight);
+                tud_cdc_n_write(CDC_ITF_TX,buf,strlen(buf));
+                tud_cdc_n_write_flush(CDC_ITF_TX);
+                set_red_led_status(1);
+            }
+            //com6
+            if (usb_serial_connected()) {
+                snprintf(buf, 32,"%d\n",ambientLight);
+                usb_serial_print(buf);
+                usb_serial_flush();
+                set_red_led_status(1);
+            }
+             //programState = WAITING;
+            programState = READ_SENSOR;
+            vTaskDelay(pdMS_TO_TICKS(500));
+        }
 
         
         // Exercise 4. Use the usb_serial_print() instead of printf or similar in the previous line.
@@ -112,7 +156,7 @@ static void print_task(void *arg){
 
         // Exercise 3. Just for sanity check. Please, comment this out
         // Tehtävä 3: Just for sanity check. Please, comment this out
-        printf("printTask\n");
+        //printf("printTask\n");
         
         // Do not remove this
         vTaskDelay(pdMS_TO_TICKS(1000));
@@ -145,7 +189,8 @@ int main() {
     //             Lisää CMakeLists.txt-tiedostoon cfg-dual-usbcdc
     //             Poista CMakeLists.txt-tiedostosta käytöstä pico_enable_stdio_usb
 
-    stdio_init_all();
+    //stdio_init_all();
+    
 
     // Uncomment this lines if you want to wait till the serial monitor is connected
     /*while (!stdio_usb_connected()){
@@ -160,22 +205,23 @@ int main() {
     // Tehtävä 1:  Alusta painike ja LEd ja rekisteröi vastaava keskeytys.
     //             Keskeytyskäsittelijä on määritelty yläpuolella nimellä btn_fxn
 
+    init_led();
+    init_button1();
 
+    gpio_set_irq_enabled_with_callback(SW1_PIN, GPIO_IRQ_EDGE_FALL, true, &btn_fxn);
 
-    
-    
     TaskHandle_t hSensorTask, hPrintTask, hUSB = NULL;
 
     // Exercise 4: Uncomment this xTaskCreate to create the task that enables dual USB communication.
     // Tehtävä 4: Poista tämän xTaskCreate-rivin kommentointi luodaksesi tehtävän,
     // joka mahdollistaa kaksikanavaisen USB-viestinnän.
 
-    /*
+    
     xTaskCreate(usbTask, "usb", 2048, NULL, 3, &hUSB);
     #if (configNUMBER_OF_CORES > 1)
         vTaskCoreAffinitySet(hUSB, 1u << 0);
     #endif
-    */
+    
 
 
     // Create the tasks with xTaskCreate
@@ -201,7 +247,11 @@ int main() {
         printf("Print Task creation failed\n");
         return 0;
     }
-
+    programState = READ_SENSOR;
+    // Initialize TinyUSB 
+    tusb_init();
+    //Initialize helper library to write in CDC0)
+    usb_serial_init();
     // Start the scheduler (never returns)
     vTaskStartScheduler();
     

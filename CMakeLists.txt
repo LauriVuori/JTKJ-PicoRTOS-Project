@@ -10,7 +10,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Define project name
 set(APP_NAME JTKJ_app) 
 # Define main app (app in this folder)
-set(MAIN_TARGET hat_app)
+set(MAIN_TARGET my_program)
 #===============================================================================================
 
 # Initialise pico_sdk from installed location
@@ -94,7 +94,7 @@ add_subdirectory(examples/hello_dual_cdc)
 # add_subdirectory(examples/compilation_errors)
 add_subdirectory(examples/hello_hat)
 add_subdirectory(examples/hat_example)
-# add_subdirectory(examples/compilation_errors)
+add_subdirectory(examples/compilation_errors)
 
 # You can edit it if you want to add new examples
 # ==============================================================================================
@@ -107,7 +107,7 @@ add_subdirectory(examples/hat_example)
 # Add the source files to be compiled
 # If you add the headers in a different directory, you should use: target_include_directories
 add_executable(${MAIN_TARGET}
-    src/main.c
+    ${CMAKE_CURRENT_LIST_DIR}/src/main.c
 )
 
 # Links. Add all libraries that application is using. It must at least use the pico_stdlib
@@ -123,7 +123,7 @@ target_link_libraries(${MAIN_TARGET}
         FreeRTOS-Kernel-Heap4
         TKJHAT_SDK           # if main.c uses it
         usb_serial_debug     # if main.c uses it
-        cfg-dual-usbcdc      # if main.c uses it
+        # cfg-dual-usbcdc      # if main.c uses it
 )
 
 # Include libraries necessaries to control the WiFi. If you are using the internal pico LED in W model, it is also 
@@ -133,8 +133,8 @@ if (PICO_CYW43_SUPPORTED)
 endif()
 
 #Support for stdio (printf, fwrite, puts...) via usb or UART. 
-pico_enable_stdio_usb(${MAIN_TARGET} 1)
-pico_enable_stdio_uart(${MAIN_TARGET} 0)
+pico_enable_stdio_usb(${MAIN_TARGET} 0)
+pico_enable_stdio_uart(${MAIN_TARGET} 1) 
 
 # Create different output files: 
 # .elf -> Executable with debug info (for GDB)  
