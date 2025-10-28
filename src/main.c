@@ -5,6 +5,12 @@ usb_serial_print can be used anywhere to debug things.
 usb_serial_print("ICM-42670P initialized successfully!\n"); 
 
 
+
+
+!! 
+Buzzer works but needs to figure out how to play messages.
+buzzer_play_tone(440, 500);
+
 */
 #include <stdio.h>
 #include <string.h>
@@ -145,10 +151,12 @@ static void gyroscope_task(void *arg){
             }
             
         }
+        
         // Do not remove this
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
+
 
 int main() {
     
@@ -157,6 +165,7 @@ int main() {
     init_led();
     init_rgb_led();
     init_button1();
+    init_buzzer();
 
     gpio_set_irq_enabled_with_callback(SW1_PIN, GPIO_IRQ_EDGE_FALL, true, &btn_fxn);
 
@@ -216,8 +225,10 @@ int main() {
         return 0;
     }
 
-   
+    //test program states
     programState = READ_GYRO;
+
+
     // Initialize TinyUSB 
     tusb_init();
     //Initialize helper library to write in CDC0)
