@@ -7,10 +7,10 @@ usb_serial_print("ICM-42670P initialized successfully!\n");
 
 
 
-!! 
+1. 
 Buzzer works but needs to figure out how to play messages.
 buzzer_play_tone(440, 500);
-
+2. display task works but gyro does not work simultaneously.
 */
 #include <stdio.h>
 #include <string.h>
@@ -92,6 +92,34 @@ static void print_task(void *arg){
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
+
+static void display_task(void *arg){
+    (void)arg;
+
+    while(1){
+        
+        while (1) {
+                clear_display();
+                // write_text("Hello");
+                // draw_circle(1, 1, 20);
+                // draw_line(0, 0, 127, 0);
+                draw_square(30,10,20,20, true);
+                draw_square(70,10,20,20, false);
+                vTaskDelay(1000);
+                clear_display();
+                draw_line(30, 20, 50, 20);
+                draw_line(70, 20, 90, 20);
+                vTaskDelay(300);
+
+        }
+
+        // Do not remove this
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+}
+
+
+
 // if data is available read it and echo it back.
 static void uart_receive_task(void *arg){
     (void)arg;
@@ -166,10 +194,11 @@ int main() {
     init_rgb_led();
     init_button1();
     init_buzzer();
+    init_display();
 
     gpio_set_irq_enabled_with_callback(SW1_PIN, GPIO_IRQ_EDGE_FALL, true, &btn_fxn);
 
-    TaskHandle_t hSensorTask, hPrintTask, hUartTask, hGyroTask, hUSB = NULL;
+    TaskHandle_t hSensorTask, hPrintTask, hUartTask, hGyroTask, hDisplayTask, hUSB = NULL;
 
     
     xTaskCreate(usbTask, "usb", 2048, NULL, 3, &hUSB);
@@ -224,6 +253,19 @@ int main() {
         printf("Print Task creation failed\n");
         return 0;
     }
+
+    // result = xTaskCreate(display_task,  // (en) Task function
+    //         "display_task",              // (en) Name of the task 
+    //         DEFAULT_STACK_SIZE,   // (en) Size of the stack for this task (in words). Generally 1024 or 2048
+    //         NULL,                 // (en) Arguments of the task 
+    //         2,                    // (en) Priority of this task
+    //         &hDisplayTask);         // (en) A handle to control the execution of this task
+
+    // if(result != pdPASS) {
+    //     printf("Print Task creation failed\n");
+    //     return 0;
+    // }
+
 
     //test program states
     programState = READ_GYRO;
