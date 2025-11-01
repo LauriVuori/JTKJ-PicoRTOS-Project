@@ -5,3 +5,9 @@ Thumbs.db
 # Doxygen output
 libs/TKJHAT/docs/out/
 c_testing
+Desktop
+.vbox*
+.xs*
+.cache
+.local
+.config

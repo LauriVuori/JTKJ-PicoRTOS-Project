@@ -621,6 +621,7 @@ void init_display(void);
  * @see write_text_xy()
  */
 void write_text(const char *text);
+void write_text_modified(const char *text);
 
 /**
  * @brief Write a text string starting at (x0, y0).

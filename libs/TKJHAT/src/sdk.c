@@ -373,6 +373,20 @@ void write_text(const char *text) {
     sleep_ms(800);
 }
 
+void write_text_modified(const char *text) {
+
+    if (!text)return;
+
+    // Draw the text at the specified position with a font size of 2
+    ssd1306_draw_string(&disp, 1, 1, 1, text);
+
+    // Update the display
+    ssd1306_show(&disp);
+
+    // Delay for 800 milliseconds
+    sleep_ms(800);
+}
+
 /**
  * @brief Put a pixel with bounds checking (no immediate display update).
  *

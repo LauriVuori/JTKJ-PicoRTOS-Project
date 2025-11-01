@@ -4,6 +4,7 @@ COM6 is used for usb_serial debug prints.
 usb_serial_print can be used anywhere to debug things.
 usb_serial_print("ICM-42670P initialized successfully!\n"); 
 
+!! COM7 communicates with the host computer.
 
 
 
@@ -11,6 +12,15 @@ usb_serial_print("ICM-42670P initialized successfully!\n");
 Buzzer works but needs to figure out how to play messages.
 buzzer_play_tone(440, 500);
 2. display task works but gyro does not work simultaneously.
+
+
+
+****************************
+TODO:
+
+
+
+****************************
 */
 #include <stdio.h>
 #include <string.h>
@@ -42,23 +52,122 @@ buzzer_play_tone(440, 500);
 uint8_t rx_buffer[MAX_BUFFER_SIZE];
 uint8_t tx_buffer[MAX_BUFFER_SIZE];
 
+/**
+ * @struct MorseCode
+ * @brief Represents a mapping between a letter and its Morse code.
+ * This struct is used in the global morseTable array. {'A', ".-"}, {'B', "-..."},....
+ */
+struct MorseCode {
+    char letter;
+    const char *code;
+};
+
+
+struct MorseCode morseTable[] = {
+    {'A', ".-"}, {'B', "-..."}, {'C', "-.-."}, {'D', "-.."},
+    {'E', "."}, {'F', "..-."}, {'G', "--."}, {'H', "...."},
+    {'I', ".."}, {'J', ".---"}, {'K', "-.-"}, {'L', ".-.."},
+    {'M', "--"}, {'N', "-."}, {'O', "---"}, {'P', ".--."},
+    {'Q', "--.-"}, {'R', ".-."}, {'S', "..."}, {'T', "-"},
+    {'U', "..-"}, {'V', "...-"}, {'W', ".--"}, {'X', "-..-"},
+    {'Y', "-.--"}, {'Z', "--.."}
+};
+
 
 
 enum state {WAITING=1,
             READ_SENSOR=2,
             PRINT_DATA=3,
             READ_UART=4,
-            READ_GYRO=5
+            READ_GYRO=5,
+            WRITE_UART=6
            };
 enum state programState = WAITING;
 
-// ---- Task running USB stack ----
-static void usbTask(void *arg) {
-    (void)arg;
-    while (1) {
-        tud_task();              // With FreeRTOS wait for events
-                                 // Do not add vTaskDelay. 
+void morse_to_text(const char *message, char *output){
+    int tableSize = sizeof(morseTable) / sizeof(morseTable[0]);
+    char temp[BUFFER_SIZE];
+    int tempIndex = 0;
+    int output_index = 0;
+    output[0] = '\0'; // make sure output is empty
+    int spaceCount = 0; // to store spaces from message and determinen where words end or start
+
+    for (int i = 0; message[i] != '\0'; i++) {
+        //char charFromMessage = message[i];
+        if (message[i] == '-' || message[i] == '.'){
+            if (tempIndex < sizeof(temp) - 1) {
+                temp[tempIndex] = message[i];
+                tempIndex++;
+                temp[tempIndex] = '\0'; //move end of line
+            }
+            spaceCount = 0; // reset space count after a dot/dash
+        }
+        else if (message[i] == ' '){
+            spaceCount++;
+            printf("spacecount: %d\n", spaceCount);
+        }
+        if (spaceCount == 1 && tempIndex > 0){
+            // end of letter
+            for (int j = 0; j < tableSize; j++) {
+                if (strcmp(temp, morseTable[j].code) == 0) {
+                    output[output_index] = morseTable[j].letter;
+                    output_index++;
+                }
+            }
+            tempIndex = 0;
+            temp[0] = '\0';
+           
+        }
+        else if (spaceCount == 2 && message[i+1] != ' '){
+            output[output_index] = ' ';
+            output_index++;
+            spaceCount = 0; // reset space count after processing space
+        }
+        else{
+            // end of word
+            output[output_index] = '\0'; // null-terminate the output string
+            spaceCount = 0; // reset space count after processing word
+        }
+        
     }
+    /* TESTING */
+    /*
+    printf("TESTING message: %s\n", message);
+    printf("TESTING temp: <%s>\n", &temp);
+    printf("output:<%s>\n", output);
+    */
+}
+
+
+
+/**
+ * @brief function to write morse code message to display in clear text
+ * 
+ * @param msg 
+ */
+
+void write_to_display(const char* msg){
+    /*
+    char morseInput[200] = {".- .- ... ..  --- -.   \n\0"};
+    char decoded[100];
+     morse_to_text(morseInput, decoded);
+    morse_to_text(morseInput, decoded);
+    printf("Decoded text: %s\n", decoded);
+    */
+    
+    
+    clear_display();
+    char decoded[100];
+    morse_to_text(msg, decoded);
+    write_text_modified(decoded);
+    //write_text_modified(msg);
+}
+
+void debug_print(const char* msg){
+    #ifdef DEBUG
+    usb_serial_print("DEBUG: ");
+    usb_serial_print(msg);
+    #endif
 }
 static void btn_fxn(uint gpio, uint32_t eventMask) {
     // Tehtävä 1: Vaihda LEDin tila.
@@ -67,6 +176,18 @@ static void btn_fxn(uint gpio, uint32_t eventMask) {
     //             Check the SDK and if you do not find a function you would need to implement it yourself. 
     // toggle_red_led();
     toggle_led();
+
+
+}
+
+
+// ---- Task running USB stack ----
+static void usbTask(void *arg) {
+    (void)arg;
+    while (1) {
+        tud_task();              // With FreeRTOS wait for events
+                                 // Do not add vTaskDelay. 
+    }
 }
 
 static void sensor_task(void *arg){
@@ -93,6 +214,10 @@ static void print_task(void *arg){
     }
 }
 
+
+/*
+UI task?
+*/
 static void display_task(void *arg){
     (void)arg;
 
@@ -121,6 +246,14 @@ static void display_task(void *arg){
 
 
 // if data is available read it and echo it back.
+/*
+* UART receive task
+* 1. Echo back received data
+* 2. Toggle LED when data is received
+* 3. Print received data to debug console (COM6) using usb_serial_print
+* 4. Change state to indicate data has been read
+* 5. Show message on display (optional) and play buzzer tone (optional)
+*/
 static void uart_receive_task(void *arg){
     (void)arg;
     while (!tud_mounted() || !tud_cdc_n_connected(1)){
@@ -130,18 +263,27 @@ static void uart_receive_task(void *arg){
         if (programState == READ_UART){
             // Get the number of bytes available for reading
             if(tud_cdc_n_available(COM_PORT_7) > 0) {
-
                 uint32_t count = tud_cdc_n_read(COM_PORT_7, rx_buffer, sizeof(rx_buffer));
+                // Echo back the received data
                 tud_cdc_n_write(COM_PORT_7, rx_buffer, count);
+                tud_cdc_n_write(COM_PORT_7, "Received morsecode", 19);
+
+                // Write to LCD display in clear text
+                write_to_display(rx_buffer);
+                // ?? force write?
                 tud_cdc_n_write_flush(COM_PORT_7);
-                toggle_led();
+                /************** TESTING USB SERIAL ***************/
+
+                
+                
+
                 // just test that usb_serial is working
                 // this can be used for testing if the usb is connected
                 if (usb_serial_connected()) {
                     //prints in com6
-                    usb_serial_print("test");
-                    usb_serial_flush();
+                    debug_print(rx_buffer);
                 }
+                /************** TESTING USB SERIAL ***************/
                 // change state that uart data has been read
                 memset(rx_buffer, 0, count);
             }
@@ -152,6 +294,7 @@ static void uart_receive_task(void *arg){
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
+
 
 
 // Tasks prints Accel: X=-0.57, Y=-0.01, Z=-0.83 | Gyro: X=-0.21, Y=0.63, Z=-0.17| Temp: 30.31°C
@@ -195,7 +338,8 @@ int main() {
     init_button1();
     init_buzzer();
     init_display();
-
+    rgb_led_write(0,0,0);
+    clear_display();
     gpio_set_irq_enabled_with_callback(SW1_PIN, GPIO_IRQ_EDGE_FALL, true, &btn_fxn);
 
     TaskHandle_t hSensorTask, hPrintTask, hUartTask, hGyroTask, hDisplayTask, hUSB = NULL;
@@ -268,7 +412,8 @@ int main() {
 
 
     //test program states
-    programState = READ_GYRO;
+    // programState = READ_GYRO;
+    programState = READ_UART;
 
 
     // Initialize TinyUSB 
