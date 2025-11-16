@@ -173,6 +173,7 @@ void debug_print(const char* msg){
     #endif
 }
 static void right_button_gyrotask_fxn_switch_interrupt(uint gpio, uint32_t eventMask) {
+    clear_display();
     // rgb_led_write(255,0,0); // red
     static TickType_t last_press = 0;
     TickType_t cur_time = xTaskGetTickCountFromISR();
@@ -327,7 +328,7 @@ static void uart_receive_task(void *arg){
 
                 // Write to LCD display in clear text
                 
-                // write_to_display(decoded);
+                write_to_display(decoded);
                 
                 
                 // ?? force write?
