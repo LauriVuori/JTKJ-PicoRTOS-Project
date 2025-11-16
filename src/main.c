@@ -53,6 +53,7 @@ uint8_t rx_buffer[MAX_BUFFER_SIZE];
 uint8_t tx_buffer[MAX_BUFFER_SIZE];
 uint8_t last_program_state = 0;
 uint8_t switch_to_gyro_task = 0;
+uint8_t switch_to_button2_task = 0;
 /**
  * @struct morse_code
  * @brief Represents a mapping between a letter and its Morse code.
@@ -159,9 +160,9 @@ void write_to_display(const char* msg){
     
     
     clear_display();
-    char decoded[100];
-    morse_to_text(msg, decoded);
-    write_text_modified(decoded);
+    //char decoded[100];
+    //morse_to_text(msg, decoded);
+    write_text_modified(msg);
     //write_text_modified(msg);
 }
 
@@ -172,6 +173,7 @@ void debug_print(const char* msg){
     #endif
 }
 static void right_button_gyrotask_fxn_switch_interrupt(uint gpio, uint32_t eventMask) {
+    // rgb_led_write(255,0,0); // red
     static TickType_t last_press = 0;
     TickType_t cur_time = xTaskGetTickCountFromISR();
 
@@ -180,17 +182,48 @@ static void right_button_gyrotask_fxn_switch_interrupt(uint gpio, uint32_t event
         return; // ignore bounce
     }
     last_press = cur_time;
-    toggle_led();
-    switch_to_gyro_task = !switch_to_gyro_task;
-    if (switch_to_gyro_task){
-        program_state = READ_GYRO;
+    
+    
+    
+    // write_to_display("gyro task switched");
+    //write_to_display(gpio == SW1_PIN ? "SW1 pressed" : "SW2 pressed");
+    debug_print(gpio == SW1_PIN ? "SW1 pressed\n" : "SW2 pressed\n");
+    if (gpio == SW1_PIN){
+        switch_to_gyro_task = !switch_to_gyro_task;
+        if (switch_to_gyro_task == 1){
+            program_state = READ_GYRO;
+        }
+        switch_to_button2_task = 0;
+        rgb_led_write(120,0,0); // red
     }
-    else {
+    else if (gpio == SW2_PIN){
+        switch_to_button2_task = !switch_to_button2_task;
+        switch_to_gyro_task = 0;
         program_state = WAITING;
+        rgb_led_write(0,0,120); // blue
     }
+    if (switch_to_gyro_task == 0 && switch_to_button2_task == 0){
+        // waiting for testing purposes 
+        program_state = READ_UART;
+        //program_state = READ_UART;
+        rgb_led_write(0,120,0); // green
+    }
+  
 
 
 }
+
+// static void left_button_interrupt(uint gpio, uint32_t eventMask) {
+    
+//     static TickType_t last_press = 0;
+//     TickType_t cur_time = xTaskGetTickCountFromISR();
+
+//     // 100ms debounce
+//     if (cur_time - last_press < pdMS_TO_TICKS(200)) {
+//         return; // ignore bounce
+//     }
+//     rgb_led_write(0,0,255); // blue
+// }
 
 
 // ---- Task running USB stack ----
@@ -274,6 +307,7 @@ static void display_task(void *arg){
 * 5. Show message on display (optional) and play buzzer tone (optional)
 */
 static void uart_receive_task(void *arg){
+    uint8_t send_data_back = 0;
     (void)arg;
     while (!tud_mounted() || !tud_cdc_n_connected(1)){
             vTaskDelay(pdMS_TO_TICKS(50));
@@ -284,13 +318,20 @@ static void uart_receive_task(void *arg){
             if(tud_cdc_n_available(COM_PORT_7) > 0) {
                 uint32_t count = tud_cdc_n_read(COM_PORT_7, rx_buffer, sizeof(rx_buffer));
                 // Echo back the received data
-                tud_cdc_n_write(COM_PORT_7, rx_buffer, count);
-                tud_cdc_n_write(COM_PORT_7, "Received morsecode", 19);
+                //tud_cdc_n_write(COM_PORT_7, rx_buffer, count);
+                // tud_cdc_n_write(COM_PORT_7, "Received morsecode", 19);
+
+
+                char decoded[100];                
+                morse_to_text((const char*)rx_buffer, decoded);
 
                 // Write to LCD display in clear text
-                write_to_display(rx_buffer);
+                
+                // write_to_display(decoded);
+                
+                
                 // ?? force write?
-                tud_cdc_n_write_flush(COM_PORT_7);
+                //tud_cdc_n_write_flush(COM_PORT_7);
                 /************** TESTING USB SERIAL ***************/
 
                 
@@ -300,15 +341,21 @@ static void uart_receive_task(void *arg){
                 // this can be used for testing if the usb is connected
                 if (usb_serial_connected()) {
                     //prints in com6
+                    debug_print(decoded);
                     debug_print(rx_buffer);
                 }
                 /************** TESTING USB SERIAL ***************/
                 // change state that uart data has been read
+                // send message back to sender
+                sprintf(tx_buffer, "Decoded message: %s\n", decoded);
+                program_state = WRITE_UART;
+                last_program_state = READ_UART;
+                // clear rx buffer
                 memset(rx_buffer, 0, count);
             }
 
               
-            vTaskDelay(pdMS_TO_TICKS(500));
+           vTaskDelay(pdMS_TO_TICKS(500));
         }
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
@@ -444,12 +491,14 @@ int main() {
     init_led();
     init_rgb_led();
     init_button1();
+    init_button2();
     init_buzzer();
     init_display();
     rgb_led_write(0,0,0);
     clear_display();
 
     gpio_set_irq_enabled_with_callback(SW1_PIN, GPIO_IRQ_EDGE_FALL, true, &right_button_gyrotask_fxn_switch_interrupt);
+    gpio_set_irq_enabled_with_callback(SW2_PIN, GPIO_IRQ_EDGE_FALL, true, &right_button_gyrotask_fxn_switch_interrupt);
 
     TaskHandle_t hSensorTask, hPrintTask, hUartTask, hGyroTask, hDisplayTask, hUSB = NULL;
 
@@ -522,7 +571,8 @@ int main() {
 
     //test program states
     // program_state = READ_GYRO;
-    program_state = WAITING;
+    program_state = READ_UART;
+    rgb_led_write(0,120,0); // green
 
 
     // Initialize TinyUSB 
