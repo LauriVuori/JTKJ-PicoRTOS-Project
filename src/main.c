@@ -423,27 +423,35 @@ void add_accel_value(float ax, float ay, float az) {
  */
 void get_avg(float *ax, float *ay, float *az) {
     float sx = 0, sy = 0, sz = 0;
-
+    // sum up the values
     for (int i = 0; i < buf_filled; i++) {
         sx += ax_buffer[i];
         sy += ay_buffer[i];
         sz += az_buffer[i];
     }
-
+    // calculate average
     *ax = sx / buf_filled;
     *ay = sy / buf_filled;
     *az = sz / buf_filled;
 }
 
-// simple orientation detection
+/**
+ * 
+ * @brief check which axis have pos negative gravity
+ * 
+ */
 int orientation_from_accel(float ax, float ay, float az) {
-    float TH = 0.5; // 50% of gravity
+    float treshold = 0.5; // 50% of gravity
 
-    if (az > TH) return 1;   // face up
-    if (az < -TH) return 2;  // face down
+    if (az > treshold) {
+        return 1;   // face up
+    }
+    if (az < -treshold) {
+        return 2;  // face down
+    }
 
-    // if (ax > TH) return 3;   // on left side
-    // if (ax < -TH) return 4;  // on right side
+    // if (ax > treshold) return 3;   // on left side
+    // if (ax < -treshold) return 4;  // on right side
     return 0; // unknown
 }
 
