@@ -44,6 +44,7 @@ TODO:
 #define MAX_BUFFER_SIZE 100
 #define COM_PORT_7  1
 #define BUFFER_SIZE 100
+#define  MIN_AMBIENT_LIGHT 0
 
 // if we want to use debug prints
 #define DEBUG 1
@@ -54,6 +55,7 @@ uint8_t tx_buffer[MAX_BUFFER_SIZE];
 uint8_t last_program_state = 0;
 uint8_t switch_to_gyro_task = 0;
 uint8_t switch_to_button2_task = 0;
+uint32_t ambientLight;
 /**
  * @struct morse_code
  * @brief Represents a mapping between a letter and its Morse code.
@@ -199,8 +201,10 @@ static void right_button_gyrotask_fxn_switch_interrupt(uint gpio, uint32_t event
     }
     else if (gpio == SW2_PIN){
         switch_to_button2_task = !switch_to_button2_task;
+        if (switch_to_button2_task == 1){
+            program_state = READ_SENSOR;
+        }
         switch_to_gyro_task = 0;
-        program_state = WAITING;
         rgb_led_write(0,0,120); // blue
     }
     if (switch_to_gyro_task == 0 && switch_to_button2_task == 0){
@@ -238,10 +242,30 @@ static void usbTask(void *arg) {
 
 static void sensor_task(void *arg){
     (void)arg;
+    init_veml6030();
     for(;;){
-        // if (program_state == READ_SENSOR){
-
-        // }
+        if (program_state == READ_SENSOR){
+            clear_display();
+            ambientLight = veml6030_read_light();
+            char test_buf[50];
+            sprintf(test_buf, "Ambient Light: %lu\n", ambientLight);
+            debug_print(test_buf);
+            
+            if (ambientLight > MIN_AMBIENT_LIGHT){
+                debug_print("Ambient light read successfully\n");
+                tx_buffer[0] = '\0'; // clear tx buffer
+                sprintf(tx_buffer, "-  \n");
+                last_program_state = READ_SENSOR;
+                program_state = WRITE_UART;
+                
+            }
+            else{
+                sprintf(tx_buffer, ".  \n");
+                last_program_state = READ_SENSOR;
+                program_state = WRITE_UART;
+            }
+            vTaskDelay(pdMS_TO_TICKS(500));
+        }
 
 
         // Do not remove this
@@ -254,9 +278,11 @@ static void uart_write_task(void *arg){
     while(1){
         if (program_state == WRITE_UART){
             tud_cdc_n_write(COM_PORT_7, tx_buffer, strlen(tx_buffer));
+            usb_serial_print("debug------\n");
             usb_serial_print(tx_buffer);
+            usb_serial_print("------debug\n");
             tud_cdc_n_write_flush(COM_PORT_7);
-            usb_serial_print("testing write uart task\n");
+            
             program_state = last_program_state;   
         }
        
@@ -348,6 +374,7 @@ static void uart_receive_task(void *arg){
                 /************** TESTING USB SERIAL ***************/
                 // change state that uart data has been read
                 // send message back to sender
+                tx_buffer[0] = '\0'; // clear tx buffer
                 sprintf(tx_buffer, "Decoded message: %s\n", decoded);
                 program_state = WRITE_UART;
                 last_program_state = READ_UART;
@@ -415,8 +442,8 @@ int orientation_from_accel(float ax, float ay, float az) {
     if (az > TH) return 1;   // face up
     if (az < -TH) return 2;  // face down
 
-    if (ax > TH) return 3;   // on left side
-    if (ax < -TH) return 4;  // on right side
+    // if (ax > TH) return 3;   // on left side
+    // if (ax < -TH) return 4;  // on right side
     return 0; // unknown
 }
 
@@ -449,20 +476,23 @@ static void gyroscope_task(void *arg){
                 float ax_s, ay_s, az_s;
                 get_avg(&ax_s, &ay_s, &az_s);
 
-                int o = orientation_from_accel(ax_s, ay_s, az_s);
-                if (o == 1) {
-                    sprintf(tx_buffer, "Orientation: Face Up\n");
-                } else if (o == 2) {
-                    sprintf(tx_buffer, "Orientation: Face Down\n");
-                } else if (o == 3) {
-                    sprintf(tx_buffer, "Orientation: Left Side\n");
-                } else if (o == 4) {
-                    sprintf(tx_buffer, "Orientation: Right Side\n");
-                } 
+                int orientation = orientation_from_accel(ax_s, ay_s, az_s);
+                tx_buffer[0] = '\0'; // clear tx buffer
+                if (orientation == 1) {
+                    sprintf(tx_buffer, ".  \n");
+                } else if (orientation == 2) {
+                    sprintf(tx_buffer, "-  \n");
+                }
+                // } else if (o == 3) {
+                //     sprintf(tx_buffer, "Orientation: Left Side\n");
+                // } else if (o == 4) {
+                //     sprintf(tx_buffer, "Orientation: Right Side\n");
+                // } 
 
-                if (o != 0) {
-                    program_state = WRITE_UART;
+                if (orientation != 0) {
                     last_program_state = READ_GYRO;
+                    program_state = WRITE_UART;
+                    
                 }
                 
                 // Direct orientation check
